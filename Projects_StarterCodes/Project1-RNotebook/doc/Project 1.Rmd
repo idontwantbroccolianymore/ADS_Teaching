@@ -1,0 +1,473 @@
+---
+title: "The history of Philosoph - from the view of data science"
+output:
+  html_document:
+    df_print: paged
+---
+
+### Part 0: Load needed libraries and the dataset
+
+```{r, message=FALSE, warning=FALSE}
+library(rvest)
+library(tibble)
+library(tidyverse)
+library(ggplot2)
+library(qdap)
+library(sentimentr)
+library(gplots)
+library(hrbrthemes)
+library(tm)
+library(syuzhet)
+library(factoextra)
+library(beeswarm)
+library(scales)
+library(RColorBrewer)
+library(RANN)
+library(topicmodels)
+library(wordcloud)
+library(tidytext)
+library(knitr)
+library(DT)
+library(plotly)
+
+philosophy_data <- read_csv("philosophy_data.csv",col_types = cols())
+```
+![The School of Athens](/Users/zhangyuqi/Desktop/The School of Athens.jpg) 
+*The School of Athens* [4]
+
+### Part 1: Data Exploration
+The [dataset](https://www.kaggle.com/kouroshalizadeh/history-of-philosophy) used in this project contains over 360,000 sentences from over 50 texts spanning 13 major schools of the history of philosophy. The represented schools are: Plato, Aristotle, Empiricism, Rationalism, Analytic, Continental, Phenomenology, German Idealism, Communism, Capitalism, Stoicism, Nietzsche, and Feminism. Besides, there are 36 represented authors from each school, such as Epictetus from Stoicism or Marx from Communism. 
+```{r}
+dim(philosophy_data)
+datatable(head(philosophy_data,n=500), 
+          options = list(pageLength = 3, scrollX = TRUE, scrollCollapse = TRUE, searching = FALSE))
+unique(philosophy_data$school)
+unique(philosophy_data$author)
+```
+Based on the above data exploration, I noticed that this is a rich dataset of philosophical sentences spanning from 350 BC to modern 1985 AD. Given such a long time span, I became interested in **whether the social change had any impact on the development of the history of philosophy.**  
+Therefore, I made an interactive graph of the dataset in chronological order. As can be seen from the figure, I can roughly divide the period over 2300 years into three stages: (1) the first stage *from 350 BC to 125 AD*; (2) the second stage *from 125 AD to 1637 AD*; (3) the third stage *from 1637 AD to 1985 AD*.  
+```{r, fig.width=10}
+timeline <- philosophy_data%>%
+  group_by(original_publication_date, author) %>%
+  summarise(count=n(), .groups = 'drop')
+
+p1 <- timeline %>%
+  ggplot(aes(x=original_publication_date, y=count)) +
+  geom_area(fill="#69b3a2", alpha=0.5) +
+  geom_line(color="#69b3a2") +
+  labs(x = "Year(350BC~1985)",
+       y = "Number of sentence for each author published") +
+  theme_ipsum()
+p1 <- ggplotly(p1)
+p1
+```
+In the following pages, I will do Wordcloud and Sentiment analysis based on these three time periods, and try to answer the questions I raised from a statistical point of view.
+
+### Part 2: Data Analysis
+**First Stage: 350 BC ~ 125 AD**
+```{r}
+timeline1 <- philosophy_data%>%
+  filter(original_publication_date<125)
+timeline1_info <- timeline1%>%
+  group_by(school, author) %>%
+  distinct(school, author, title, original_publication_date)%>%
+  arrange(original_publication_date)
+kable(timeline1_info)
+```
+
+```r
+sentence.list=NULL
+cols = c('title', 'author', 'school', 'sentence_str', 'original_publication_date')
+for(i in 1:nrow(timeline1)){
+  sentences=str_remove_all(timeline1$tokenized_txt[i], "[\\[\\],']")
+  if(length(sentences)>0){
+      emotions=get_nrc_sentiment(sentences)
+      word.count=word_count(sentences)
+        # colnames(emotions)=paste0("emo.", colnames(emotions))
+        # in case the word counts are zeros?
+      emotions=emotions/(word.count+0.01)
+      sentence.list=rbind(sentence.list, 
+                          cbind(timeline1[i,cols],
+                                sentences=as.character(sentences), 
+                                word.count,
+                                emotions)
+        )
+      }
+}
+write.csv(sentence.list,"../output/sentiment_1.csv", row.names = TRUE, col.names = TRUE)
+```
+```{r, warning=FALSE}
+sentiment_1 <- read_csv("sentiment_1.csv", col_types = cols())
+dim(sentiment_1)
+
+sentiment_1 <- sentiment_1%>%
+  filter(!is.na(word.count))%>%
+  filter((anger!=0)&(anticipation!=0)&(disgust!=0)&(fear!=0)
+         &(joy!=0)&(sadness!=0)&(surprise!=0)&(trust!=0)) %>%
+  mutate(neutral = if_else((negative==0)&(positive==0),1,0)) %>%
+  mutate(main_emotion=apply(.[c((9:16),19)], 1, function(x) names(x)[which.max(x)])) %>%
+  mutate(main_attitude=apply(.[c((17:19),20)], 1, function(x) names(x)[which.max(x)])) %>%
+  select(-sentences)
+dim(sentiment_1)
+head(sentiment_1)
+
+sentiment_1%>%
+  group_by(main_emotion, school) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=main_emotion, y = index, fill=school)) +
+  geom_bar(position="dodge", stat="identity") + 
+  coord_flip() +
+  labs(x='Emotions',
+       y='',
+       title='Sentiment analysis for emotions among time period 1')
+
+sentiment_1%>%
+  filter(main_emotion=='anger') %>%
+  arrange(desc(anger)) %>%
+  select(author,sentence_str,main_emotion,anger)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+sentiment_1%>%
+  filter(main_emotion=='trust') %>%
+  arrange(desc(trust)) %>%
+  select(author,sentence_str,main_emotion,trust)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+
+sentiment_1%>%
+  group_by(main_attitude, school) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=school, y = index, fill=main_attitude)) +
+  geom_bar(position="dodge", stat="identity") + 
+  coord_flip() +
+  labs(x='School',
+       y='',
+       title='Sentiment analysis for attitudes among time period 1')
+
+sentiment_1%>%
+  filter(main_attitude=='positive') %>%
+  arrange(desc(positive)) %>%
+  select(author,sentence_str,main_attitude,positive)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+sentiment_1%>%
+  filter(main_attitude=='negative') %>%
+  arrange(desc(negative)) %>%
+  select(author,sentence_str,main_attitude,negative)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+```
+
+```{r, warning=FALSE}
+mywords <- c('one', 'will', 'also')
+sent1 <- Corpus(VectorSource(timeline1$sentence_lowered))
+sent1 <- tm_map(sent1, stripWhitespace)
+sent1 <- tm_map(sent1, removeNumbers)
+sent1 <- tm_map(sent1, removeWords, stopwords("english"))
+sent1 <- tm_map(sent1, removeWords, character(0))
+sent1 <- tm_map(sent1, removePunctuation)
+tdm1 <- TermDocumentMatrix(sent1)
+tdm1.tidy = tidy(tdm1)
+tdm1.overall=summarise(group_by(tdm1.tidy, term), sum(count))
+tdm1.overall <- tdm1.overall %>%
+  rename(n = 'sum(count)') %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(desc(n))
+kable(tdm1.overall[1:20,])
+```
+```{r, fig.height=6, fig.width=6, warning=FALSE}
+wordcloud(tdm1.overall$term, tdm1.overall$n,
+          scale=c(5,0.5),
+          max.words=100,
+          min.freq=10,
+          random.order=FALSE,
+          rot.per=0.3,
+          random.color=FALSE,
+          colors=brewer.pal(9,"Dark2"))
+```
+
+**Second Stage: 125 AD ~ 1637 AD**
+```{r}
+timeline2 <- philosophy_data%>%
+  filter(original_publication_date>=125 & original_publication_date<1637)
+timeline2_info <- timeline2%>%
+  group_by(school, author) %>%
+  distinct(school, author, title, original_publication_date)%>%
+  arrange(original_publication_date)
+kable(timeline2_info)
+```
+
+```r
+sentence.list=NULL
+cols = c('title', 'author', 'school', 'sentence_str', 'original_publication_date')
+for(i in 1:nrow(timeline2)){
+  sentences=str_remove_all(timeline2$tokenized_txt[i], "[\\[\\],']")
+  if(length(sentences)>0){
+      emotions=get_nrc_sentiment(sentences)
+      word.count=word_count(sentences)
+        # colnames(emotions)=paste0("emo.", colnames(emotions))
+        # in case the word counts are zeros?
+      emotions=emotions/(word.count+0.01)
+      sentence.list=rbind(sentence.list, 
+                          cbind(timeline2[i,cols],
+                                sentences=as.character(sentences), 
+                                word.count,
+                                emotions)
+        )
+      }
+}
+write.csv(sentence.list,"../output/sentiment_2.csv", row.names = TRUE, col.names = TRUE)
+```
+```{r, warning=FALSE}
+sentiment_2 <- read_csv("sentiment_2.csv", col_types = cols())
+dim(sentiment_2)
+
+sentiment_2 <- sentiment_2%>%
+  filter(!is.na(word.count))%>%
+  filter((anger!=0)&(anticipation!=0)&(disgust!=0)&(fear!=0)
+         &(joy!=0)&(sadness!=0)&(surprise!=0)&(trust!=0)) %>%
+  mutate(neutral = if_else((negative==0)&(positive==0),1,0)) %>%
+  mutate(main_emotion=apply(.[c((9:16),19)], 1, function(x) names(x)[which.max(x)])) %>%
+  mutate(main_attitude=apply(.[c((17:19),20)], 1, function(x) names(x)[which.max(x)])) %>%
+  select(-sentences)
+dim(sentiment_2)
+head(sentiment_2)
+
+sentiment_2%>%
+  group_by(main_emotion, author) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=main_emotion, y = index, fill=author)) +
+  geom_bar(position="dodge", stat="identity") + 
+  coord_flip() +
+  labs(x='Emotions',
+       y='',
+       title='Sentiment analysis for emotions among time period 2')
+
+sentiment_2%>%
+  filter(main_emotion=='anger') %>%
+  arrange(desc(anger)) %>%
+  select(author,sentence_str,main_emotion,anger)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+sentiment_2%>%
+  filter(main_emotion=='fear') %>%
+  arrange(desc(fear)) %>%
+  select(author,sentence_str,main_emotion,fear)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+
+sentiment_2%>%
+  group_by(main_attitude, author) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=author, y = index, fill=main_attitude)) +
+  geom_bar(position="fill", stat="identity") + 
+  coord_flip() +
+  labs(x='Author',
+       y='Percentage',
+       title='Sentiment analysis for attitudes among time period 2')
+
+sentiment_2%>%
+  filter(main_attitude=='positive') %>%
+  arrange(desc(positive)) %>%
+  select(author,sentence_str,main_attitude,positive)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+sentiment_2%>%
+  filter(main_attitude=='negative') %>%
+  arrange(desc(negative)) %>%
+  select(author,sentence_str,main_attitude,negative)%>%
+  group_by(author) %>%
+  slice_head(n=2)
+```
+```{r, warning=FALSE}
+sent2 <- Corpus(VectorSource(timeline2$sentence_lowered))
+sent2 <- tm_map(sent2, stripWhitespace)
+sent2 <- tm_map(sent2, removeNumbers)
+sent2 <- tm_map(sent2, removeWords, stopwords("english"))
+sent2 <- tm_map(sent2, removeWords, character(0))
+sent2 <- tm_map(sent2, removePunctuation)
+tdm2 <- TermDocumentMatrix(sent2)
+tdm2.tidy = tidy(tdm2)
+tdm2.overall=summarise(group_by(tdm2.tidy, term), sum(count))
+tdm2.overall <- tdm2.overall %>%
+  rename(n = 'sum(count)') %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(desc(n))
+kable(tdm2.overall[1:20,])
+```
+```{r, fig.height=6, fig.width=6, warning=FALSE}
+wordcloud(tdm2.overall$term, tdm2.overall$n,
+          scale=c(5,0.5),
+          max.words=100,
+          min.freq=10,
+          random.order=FALSE,
+          rot.per=0.3,
+          random.color=FALSE,
+          colors=brewer.pal(9,"Dark2"))
+```
+
+**Third Stage: 1637 AD ~ 1985 AD**
+```{r}
+timeline3 <- philosophy_data%>%
+  filter(original_publication_date>=1637)
+timeline3_info <- timeline3%>%
+  group_by(school, author) %>%
+  distinct(school, author, title,original_publication_date)%>%
+  arrange(original_publication_date)
+kable(timeline3_info)
+timeline3 %>%
+  group_by(school) %>%
+  summarize(article_per_school = n_distinct(title)) %>%
+  ggplot(aes(x=school, y=article_per_school)) +
+  geom_bar(stat='identity', fill='blue', alpha=0.6) +
+  labs(y='Number of articles', x='School') +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```r
+sentence.list=NULL
+cols = c('title', 'author', 'school', 'sentence_str', 'original_publication_date')
+for(i in 1:nrow(timeline3)){
+  sentences=str_remove_all(timeline3$tokenized_txt[i], "[\\[\\],']")
+  if(length(sentences)>0){
+      emotions=get_nrc_sentiment(sentences)
+      word.count=word_count(sentences)
+        # colnames(emotions)=paste0("emo.", colnames(emotions))
+        # in case the word counts are zeros?
+      emotions=emotions/(word.count+0.01)
+      sentence.list=rbind(sentence.list, 
+                          cbind(timeline3[i,cols],
+                                sentences=as.character(sentences), 
+                                word.count,
+                                emotions)
+        )
+      }
+}
+write.csv(sentence.list,"../output/sentiment_3.csv", row.names = TRUE, col.names = TRUE)
+```
+```{r, warning=FALSE}
+sentiment_3 <- read_csv("sentiment_3.csv", col_types = cols())
+dim(sentiment_3)
+
+sentiment_3 <- sentiment_3%>%
+  filter(!is.na(word.count))%>%
+  filter((anger!=0)&(anticipation!=0)&(disgust!=0)&(fear!=0)
+         &(joy!=0)&(sadness!=0)&(surprise!=0)&(trust!=0)) %>%
+  mutate(neutral = if_else((negative==0)&(positive==0),1,0)) %>%
+  mutate(main_emotion=apply(.[c((9:16),19)], 1, function(x) names(x)[which.max(x)])) %>%
+  mutate(main_attitude=apply(.[c((17:19),20)], 1, function(x) names(x)[which.max(x)])) %>%
+  select(-sentences)
+dim(sentiment_3)
+head(sentiment_3)
+
+sentiment_3%>%
+  group_by(main_emotion, school) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=school, y = index, fill=main_emotion)) +
+  geom_bar(position="dodge", stat="identity") + 
+  coord_flip() +
+  facet_wrap(~main_emotion) +
+  ggtitle('Sentiment analysis for emotions among time period 3')
+
+sentiment_3%>%
+  filter(main_emotion=='anger') %>%
+  arrange(desc(anger)) %>%
+  select(school,sentence_str,main_emotion,anger)%>%
+  group_by(school) %>%
+  slice_head(n=2)
+sentiment_3%>%
+  filter(main_emotion=='trust') %>%
+  arrange(desc(trust)) %>%
+  select(school,sentence_str,main_emotion,trust)%>%
+  group_by(school) %>%
+  slice_head(n=2)
+
+sentiment_3%>%
+  group_by(main_attitude, school) %>%
+  summarize_all(n_distinct) %>%
+  ggplot(aes(x=school, y = index, fill=main_attitude)) +
+  geom_bar(position="fill", stat="identity") + 
+  coord_flip() +
+  labs(x='School',
+       y='Percentage',
+       title='Sentiment analysis for attitudes among time period 3')
+
+sentiment_3%>%
+  filter(main_attitude=='positive') %>%
+  arrange(desc(positive)) %>%
+  select(school,sentence_str,main_attitude,positive)%>%
+  group_by(school) %>%
+  slice_head(n=2)
+sentiment_3%>%
+  filter(main_attitude=='negative') %>%
+  arrange(desc(negative)) %>%
+  select(school,sentence_str,main_attitude,negative)%>%
+  group_by(school) %>%
+  slice_head(n=2)
+```
+```{r, warning=FALSE}
+sent3 <- Corpus(VectorSource(timeline3$sentence_lowered))
+sent3 <- tm_map(sent3, stripWhitespace)
+sent3 <- tm_map(sent3, removeNumbers)
+sent3 <- tm_map(sent3, removeWords, stopwords("english"))
+sent3 <- tm_map(sent3, removeWords, character(0))
+sent3 <- tm_map(sent3, removePunctuation)
+tdm3 <- TermDocumentMatrix(sent3)
+tdm3.tidy = tidy(tdm3)
+tdm3.overall=summarise(group_by(tdm3.tidy, term), sum(count))
+tdm3.overall <- tdm3.overall %>%
+  rename(n = 'sum(count)') %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(desc(n))
+kable(tdm3.overall[1:20,])
+```
+```{r, fig.height=6, fig.width=6, warning=FALSE}
+wordcloud(tdm3.overall$term, tdm3.overall$n,
+          scale=c(5,0.5),
+          max.words=100,
+          min.freq=10,
+          random.order=FALSE,
+          rot.per=0.3,
+          random.color=FALSE,
+          colors=brewer.pal(9,"Dark2"))
+```
+
+### Part 3: Conclusion
+
+**First stage: 350BC ~ 125AD**
+
+During this time period, our dataset contains the complete work of two foundational schools and their corresponding most influential author: Plato and Aristotle. 
+
+Plato's philosophical thought is a huge system, the core of which is the "ideology theory". In his view, the world is divided into two parts: the natural world in the senses and the supernatural world in the ideas. Because the perceived world is always changing, people's understanding of it varies from time to time, from place to place, from person to person, so the perceived world is unreal.[1]
+
+Aristotle's philosophical epistemology begins with a critique of Plato's theory of ideas. In his "Metaphysics", he believes that the natural world is an objective and real existence, and people's cognition comes from their sense of the objective world. Without sense, there is no knowledge.[1]
+
+Although their philosophical thoughts are not completely similar, their status as pioneers and founders in the history of philosophy is unquestionable. It can be seen from the above sentiment analysis that the dominated emotions in the sentences of Plato and Aristotle are anger, anticipation and trust. There is no obvious positive or negative difference between the attitudes in their sentences, but both are mostly positive.
+
+Besides, based on the wordcloud for this time period, we can find some interesting relatively high-frequency words in their sentences, such as reason, nature, animals and knowledge, which is inline with their philosophy.
+
+**Second stage: 125AD ~ 1637AD**
+
+During this time period, our dataset contains one school - Stoicism - and its corresponding two authors: Epictetus and Marcus Aurelius. 
+
+The first thing catches my attention is that although this is a time span over 1500 years, there are only two authors who were active in the 2nd century AD including in this dataset. I have two possible explanations for this: first, the lack of philosophical data during this period is due to the limitation of the dataset;  second, the philosophical thought during this period in history was relatively inactive due to other factors, such as the rise of mainstream religious thought.
+
+From the sentiment analysis of Epictetus and Marcus Aurelius, I find that anger and anticipation are the two main emotions.  Significantly different from Plato and Aristotle in the first stage, in the attitude analysis of Epictetus and Marcus Aurelius, negative attitudes account for a large proportion (both greater than 60%).  From the wordcloud of the second stage, the common high-frequency words that attract attention are life, world, universe and soul.
+
+**Third stage: 1637 AD ~ 1985 AD**
+
+The third time period is the closest one to us. Therefore, I expect the results to be the most understandable and familiar before the analysis. 
+
+The dataset at this stage contains 10 schools and their corresponding 32 authors. We can find that although this period is only over 300 years old, it has the most schools and authors. It seems that in this time period, mankind’s philosophical thinking has in flourished. 
+
+Combined with my knowledge of history, I think the reasons for the active development of philosophy at this stage are due to (1) the Renaissance movement, which peaked in the 16th century, and (2) the Industrial Revolution, which began in the 18th century. The Renaissance liberated the mind and liberated people from the theocracy of the Middle Ages, while the labor liberation brought about by the Industrial Revolution promoted the improvement of people's living standards.[3] The improvement of these two aspects has led to the vigorous development of modern human civilization, which also includes philosophy.
+
+From the sentiment analysis at this stage, I observe that anger, anticipation, fear and trust are the main emotions.  Different from the second stage, the attitude analysis of the third stage pointed out that positive dominated the attitude sentiment in all 10 schools (all exceeded 50%).  In the wordcloud at this stage, the interesting high-frequency words I observed are self, existence, labor and power.
+
+In conclusion, through the above analysis, we should be able to see that behind the longriver of history of philosophy, there is the impact of social changes in general.  
+
+### Part 4: Reference
+[1] Bakalis, Nikolaos (2005). Handbook of Greek Philosophy: From Thales to the Stoics Analysis and Fragments, Trafford Publishing ISBN 978-1-4120-4843-9.  
+[2] Bury, J. B.; Meiggs, Russell (1956). A history of Greece to the death of Alexander the Great. London: Macmillan. pp. 397, 540.  
+[3] Pincus, Steve (2009). 1688: The First Modern Revolution (2011 ed.). Yale University Press. ISBN 978-0-300-17143-3.  
+[4] Raphael (1509-1511). The School of Athens. 
