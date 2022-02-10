@@ -1,5 +1,5 @@
 ---
-title: "The history of Philosoph - from the view of data science"
+title: "The history of Philosophy - from the view of data science"
 output:
   html_document:
     df_print: paged
