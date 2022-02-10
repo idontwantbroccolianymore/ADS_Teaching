@@ -9,7 +9,7 @@ This is the first and only *individual* (as opposed to *team*) project this seme
 
 Term: Spring 2022
 
-+ Projec title: The history of Philosoph - from the view of data science
++ Projec title: The history of Philosophy - from the view of data science
 + This project is conducted by Lichun He.
 
 + Project summary: The dataset used in this project contains over 360,000 sentences from over 50 texts spanning 13 major schools of the history of philosophy. The represented schools are: Plato, Aristotle, Empiricism, Rationalism, Analytic, Continental, Phenomenology, German Idealism, Communism, Capitalism, Stoicism, Nietzsche, and Feminism. Besides, there are 36 represented authors from each school, such as Epictetus from Stoicism or Marx from Communism. After doing data exploration, I divided the period over 2300 years into three stages: (1) the first stage from 350 BC to 125 AD; (2) the second stage from 125 AD to 1637 AD; (3) the third stage from 1637 AD to 1985 AD. After that, I did sentiment analysis, wordcloud and other data visualization to take a closer of the data. Then combining my backgroud history knowledge and several research papers, I write my conclusion of how the data reflect information about history of philosophy.
