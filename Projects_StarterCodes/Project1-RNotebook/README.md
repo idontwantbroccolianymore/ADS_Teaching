@@ -9,10 +9,10 @@ This is the first and only *individual* (as opposed to *team*) project this seme
 
 Term: Spring 2022
 
-+ Projec title: Lorem ipsum dolor sit amet
-+ This project is conducted by [your name]
++ Projec title: The history of Philosoph - from the view of data science
++ This project is conducted by Lichun He.
 
-+ Project summary: [a short summary] Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++ Project summary: The dataset used in this project contains over 360,000 sentences from over 50 texts spanning 13 major schools of the history of philosophy. The represented schools are: Plato, Aristotle, Empiricism, Rationalism, Analytic, Continental, Phenomenology, German Idealism, Communism, Capitalism, Stoicism, Nietzsche, and Feminism. Besides, there are 36 represented authors from each school, such as Epictetus from Stoicism or Marx from Communism. After doing data exploration, I divided the period over 2300 years into three stages: (1) the first stage from 350 BC to 125 AD; (2) the second stage from 125 AD to 1637 AD; (3) the third stage from 1637 AD to 1985 AD. After that, I did sentiment analysis, wordcloud and other data visualization to take a closer of the data. Then combining my backgroud history knowledge and several research papers, I write my conclusion of how the data reflect information about history of philosophy.
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
